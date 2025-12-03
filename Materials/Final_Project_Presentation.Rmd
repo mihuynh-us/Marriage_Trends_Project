@@ -1,0 +1,569 @@
+---
+title: |
+
+  <br>
+  <br>
+   <br>
+    <br>
+     <br>
+     <br>
+     <br>
+     <br>
+
+  Marriage and Childbearing Trends Between U.S. States from 2000 to 2020
+  
+author: Mi Huynh
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+embed-resources: true
+editor: visual
+format:
+    revealjs:
+        width: 1200
+        height: 900
+        slide-number: true
+title-slide-attributes: 
+  data-background-image: "/Users/mihuynh/Downloads/images/727-Presentation.png"
+  data-background-position: right 700px;
+---
+
+## Family size has decreased
+
+::::: columns
+::: {.column width="40%" style="font-size: 36px"}
+-   **Background**:
+
+    -   The average family consisted of 3.15 persons in 2021, down from 3.7 in the 1960s. \[source: [Statista](https://www.statista.com/statistics/183657/average-size-of-a-family-in-the-us/#:~:text=As%20of%202023%2C%20the%20U.S.,about%2040%20percent%20in%202020.)\]
+
+-   **Problem**: Visualizations between states needed.
+
+    -   **Claim**: Can compare state-specific demographics.
+
+-   [**Research Question**:]{.underline}
+
+    -   How did marriage and childbearing trends change from 2000 to 2020, and how did these shifts vary across U.S. states?
+:::
+
+::: {.column height="20%" style="width: 600px"}
+![](family.png)
+:::
+:::::
+
+```{css, echo=FALSE}
+
+.title {
+  font-size: 65px !important;
+  color: white !important;
+  font-weight: bold;
+  font-family: "Roboto Condensed";
+}
+
+.quarto-title-author-name {
+  font-size: 45px;
+  font-weight: bold;
+  color: white !important;
+}
+
+```
+
+## Methodology:
+
+::::: columns
+::: {.column width="40%" style="font-size: 36px"}
+### APIs
+
+1.  Decennial Census
+    -   2000 & 2020
+2.  American Community Survey (ACS)
+    -   2010 & 2020
+
+### Variables
+
+-   Percentages:
+
+    -   Married households
+
+    -   Households with children
+
+    -   Education level
+
+    -   Household median income
+:::
+
+::: {.column height="40%" style="width: 600px"}
+![](census.jpg)
+:::
+:::::
+
+```{r setup, include=FALSE,results='hide'}
+library(tidyverse)
+library(epidatr)
+library(censusapi)
+install.packages('cdlTools', repos = "https://cloud.r-project.org")
+library(cdlTools)
+library(plotly)
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+install.packages("tidycensus")
+library(tidycensus)
+```
+
+```{r census_2000, include = FALSE,results='hide'}
+cs_key <- read_file("/Users/mihuynh/Downloads/census_api.txt")
+
+census_2000 <- getCensus(name = "dec/sf2profile",
+                    vintage = 2000, 
+                    vars = c("NAME",
+                             "DP1_C82", # Percent Married Couple Family
+                             "DP1_C84", # Percent Married Couple Family with children under 18
+                             "DP1_C86", # Percent Female household, no spouse
+                             "DP1_C87", # Percent Female household, no spouse with children under 18
+                             "DP1_C90", # Percent Nonfamily household ?What that mean
+                             "DP1_C68" # Percent Unmarried partner
+                             ), 
+                    region = "state", 
+                    key = cs_key)
+census_2000_sf3 <- getCensus(name = "dec/sf3profile",
+                    vintage = 2000, 
+                    vars = c("NAME",
+                             "DP2_C13", # Education
+                             "DP3_C112", # Median Income
+                             "DP3_C129", # Families
+                             "DP3_C155", # Below Poverty
+                             "DP3_C157", # Below Poverty children under 18
+                             "DP2_C43"),# Divorced 
+                    region = "state",
+                    key = cs_key) 
+census_2000 <-
+  census_2000 %>%
+  rename(Married_couple_household = DP1_C82, 
+         Married_couple_household_children = DP1_C84, 
+         Female_householder_no_spouse = DP1_C86, 
+         Female_householder_no_spouse_children = DP1_C87,
+         Unmarried_couple = DP1_C68) 
+# Unmarried couple = Unmarried partner in this case
+
+
+us_states <- map_data("state")
+census_2000$region <- tolower(census_2000$NAME)
+census_2000_states <- inner_join(us_states, census_2000)
+
+census_2000_sf3 <-
+  census_2000_sf3 %>%
+  rename(Education = DP2_C13, 
+         Median_income = DP3_C112,
+         Families = DP3_C129,
+         Below_poverty = DP3_C155,
+         Below_poverty_children = DP3_C157,
+         Divorce = DP2_C43) 
+
+census_2000_sf3$region <- tolower(census_2000_sf3$NAME)
+census_2000_sf3_states <- inner_join(us_states, census_2000_sf3)
+
+```
+
+```{r acs2010, include = FALSE,results='hide'}
+
+
+acs_2010 <- get_acs(
+  year = 2010,
+  survey = "acs5",
+  variables = c("DP02_0002PE", # Percent Family Household
+                "DP02_0004PE", # Percent Married-couple household
+                "DP02_0005PE", # Percent Married-couple household!!With children of the householder under 18 years
+                "DP02_0006PE", # Percent Male householder, no wife present, family
+                "DP02_0007PE", # Percent Male householder, no wife present, family!!With children of the householder under 18 years
+                "DP02_0008PE", # Percent Female householder, no husband present, family
+                "DP02_0009PE", # Percent Female householder, no husband present, family!!With children of the householder under 18 years
+                "DP02_0023PE", # Percent Unmarried couple
+                "DP03_0136PE", # Below Poverty ~ implied HH
+                "DP03_0120PE", # Below Poverty Children under 18
+                "DP02_0058PE", # Education
+                "DP03_0062E", # Median income ~ implied HH
+                "DP02_0029PE"), # Divorce percent
+  geography = "state",
+  output = "wide",
+  show_call = TRUE
+)
+
+# One interesting thing is that the data changes from wife/husband -> spouse
+
+acs_2010 <- acs_2010 %>%
+  rename(Family_Household = DP02_0002PE,
+  Married_couple_household = DP02_0004PE,
+  Married_couple_household_children = DP02_0005PE,
+  Male_householder_no_spouse = DP02_0006PE,
+  Male_householder_no_spouse_children = DP02_0007PE,
+  Female_householder_no_spouse = DP02_0008PE,
+  Female_householder_no_spouse_children = DP02_0009PE,
+  Unmarried_couple = DP02_0023PE,
+  Below_poverty = DP03_0136PE,
+  Below_poverty_children = DP03_0120PE,
+  Education = DP02_0058PE,
+  Median_income = DP03_0062E,
+  Divorce = DP02_0029PE)
+
+
+us_states <- map_data("state")
+acs_2010$region <- tolower(acs_2010$NAME)
+acs_2010_states <- inner_join(us_states, acs_2010)
+```
+
+```{r 2020, include=FALSE, results='hide'}
+
+acs_2020 <- get_acs(
+  year = 2020,
+  survey = "acs5",
+  cache_table = TRUE,
+  variables = c("DP02_0002P", # Percent Married-couple household
+                "DP02_0003P", # Percent Married-couple household With children of the householder under 18 years
+                "DP02_0006P", # Percent Male householder, no spouse present
+                "DP02_0007P", # Percent Male householder, no spouse present, family!!With children of the householder under 18 years
+                "DP02_0005P", # Percent Cohabiting couple With children under 18 years
+                "DP02_0010P", # Percent Female householder, no spouse present
+                "DP02_0011P", # Percent Female householder, no spouse present, family!!With children of the householder under 18 years
+                "DP02_0004P", # Percent Cohabiting couple
+                "DP02_0021P", # Percent Unmarried couple
+                "DP03_0119PE", # Below Poverty
+                "DP03_0120PE", # Below Poverty Children under 18
+                "DP03_0062E", # Median income
+                "DP02_0059PE", # Education
+                "DP02_0036PE"), # Divorced but female 
+  geography = "state",
+  output = "wide",
+  key = cs_key,
+  show_call = TRUE
+)
+
+# Terminology changed from wife/husband -> spouse in 2020
+acs_2020 <- acs_2020 %>%
+  rename(Married_couple_household = DP02_0002PE,
+  Married_couple_household_children = DP02_0003PE,
+  Male_householder_no_spouse = DP02_0006PE,
+  Male_householder_no_spouse_children = DP02_0007PE,
+  Female_householder_no_spouse = DP02_0010PE,
+  Female_householder_no_spouse_children = DP02_0011PE,
+  Unmarried_couple = DP02_0021PE,
+  Cohabiting_couple = DP02_0004PE,
+  Cohabiting_couple_children = DP02_0005PE,
+  Below_poverty = DP03_0119PE,
+  Below_poverty_children = DP03_0120PE,
+  Median_income = DP03_0062E,
+  Education = DP02_0059PE,
+  Divorce = DP02_0036PE)
+
+# Unmarried ~ roommates
+# Cohabiting ~ relationship
+
+us_states <- map_data("state")
+acs_2020$region <- tolower(acs_2020$NAME)
+acs_2020_states <- inner_join(us_states, acs_2020)
+```
+
+```{r census2020, include=FALSE, results='hide'}
+census_2020 <- getCensus(name = "dec/dp",
+                    vintage = 2020, 
+                    vars = c("NAME",
+                             "DP1_0135P", # Cohabitating couple
+                             "DP1_0136P", # Cohabitating couple children
+                             "DP1_0134P", # Married couple children
+                             "DP1_0140P", # Male, no spouse, children
+                             "DP1_0144P"), # Female, no spouse, children
+                    region = "state", 
+                    key = cs_key)
+
+
+census_2020 <-
+  census_2020 %>%
+  rename(Cohabiting_couple = DP1_0135P, 
+         Cohabiting_couple_children = DP1_0136P, 
+         Married_couple_household_children = DP1_0134P, 
+         Male_householder_no_spouse_children = DP1_0140P,
+         Female_householder_no_spouse_children = DP1_0144P)
+
+
+us_states <- map_data("state")
+census_2020$region <- tolower(census_2020$NAME)
+census_2020_states <- inner_join(us_states, census_2020)
+
+```
+
+## How many households are getting married?
+
+```{r plotly1,echo=F, message=FALSE, warning=FALSE, results = "asis"}
+
+
+library(plotly)
+# Add year column
+census_2000_states$year <- "2000"
+acs_2010_states$year <- "2010"
+acs_2020_states$year <- "2020"
+
+
+# Keep only common columns
+common_cols <- Reduce(intersect, list(
+  names(census_2000_states),
+  names(acs_2010_states),
+  names(acs_2020_states)
+))
+
+census_2000_states2 <- census_2000_states[, common_cols]
+acs_2010_states2 <- acs_2010_states[, common_cols]
+acs_2020_states2 <- acs_2020_states[, common_cols]
+
+# Combine all years
+all_df <- rbind(census_2000_states2, acs_2010_states2, acs_2020_states2)
+
+
+library(ggplot2)
+library(plotly)
+
+p <- ggplot(all_df) +
+  geom_polygon(
+    aes(
+      x = long,
+      y = lat,
+      group = group,
+      fill = Married_couple_household,
+      frame = year,
+      text = paste0(
+        "State: ", NAME, "<br>",
+        "Percent Married: ", Married_couple_household, "%"
+      )
+    )
+  ) +
+  scale_fill_viridis_c(option = "C", limits = c(42,65)) +
+  coord_fixed(1.3) +
+  labs(fill = "Percent", title = "Percent of Married Households by Year") +
+  theme_void() +
+  theme(plot.title = element_text(size = 22))
+pp <- ggplotly(p, tooltip = "text") %>%
+  animation_opts(
+    frame = 0,               # set frame duration to 0
+    transition = 0,          # no smooth transition
+    redraw = TRUE
+  ) %>%
+  animation_slider(
+    currentvalue = list(prefix = "Year: "),
+  ) %>%
+  animation_button(
+    x = 1, y = 0,            # move button off-screen
+    visible = FALSE           # hide the Play button
+  ) %>%
+  layout(width = 1100, height = 850, margin = list(t = 60, b = 40, l = 20, r = 20))
+pp
+```
+
+## How many people are having children?
+
+```{r plotly2, echo=F, message=FALSE, warning=FALSE, results = "asis"}
+census_2020_states$year <- "2020"
+# Keep only common columns
+common_cols2 <- Reduce(intersect, list(
+  names(census_2000_states),
+  names(acs_2010_states),
+  names(census_2020_states)
+))
+
+census_2000_states3 <- census_2000_states[, common_cols2]
+acs_2010_states3 <- acs_2010_states[, common_cols2]
+census_2020_states3 <- census_2020_states[, common_cols2]
+
+# Combine all years
+all_df2 <- rbind(census_2000_states3, acs_2010_states3, census_2020_states3)
+
+r <- ggplot(all_df2) +
+  geom_polygon(
+    aes(
+      x = long,
+      y = lat,
+      group = group,
+      fill = Married_couple_household_children,
+      frame = year,
+      text = paste0(
+        "State: ", NAME, "<br>",
+        "Percent Married: ", Married_couple_household_children, "%"
+      )
+    )
+  ) +
+  scale_fill_viridis_c(option = "C") +
+  coord_fixed(1.3) +
+  labs(title = "Percent of Married Households with Children under 18 by Year", fill = "Percent", subtitle = "Why are less people getting married and having children?") +
+  theme_void() +
+  theme(plot.title = element_text(size = 20))
+rr <- ggplotly(r, tooltip = "text") %>%
+  animation_opts(
+    frame = 0,               # set frame duration to 0
+    transition = 0,          # no smooth transition
+    redraw = TRUE
+  ) %>%
+  animation_slider(
+    currentvalue = list(prefix = "Year: "),
+  ) %>%
+  animation_button(
+    x = 1, y = 0,            # move button off-screen
+    visible = FALSE           # hide the Play button
+  ) %>%
+  layout(width = 1100, height = 850, margin = list(t = 60, b = 40, l = 20, r = 20))
+rr
+
+
+```
+
+```{r edu_data_manage, include=FALSE, results = "hide"}
+acs_2020_edu <- get_acs(year = 2020,
+                        survey = "acs5",
+                        variables = c("DP02_0067P", # HS Diploma or higher
+                                      "DP02_0058P"), # College or graduate
+                        cache_table = TRUE,
+                        geography = "state",
+                        key = cs_key,
+                        output = "wide")
+acs_2020_edu <- acs_2020_edu %>%
+  rename(HS = DP02_0067PE,
+         college_grad = DP02_0058PE)
+
+acs_2020_edu$region <- tolower(acs_2020_edu$NAME)
+edu_2020_states <- inner_join(us_states, acs_2020_edu)
+
+
+
+acs_2010_edu <- get_acs(year = 2010,
+                        survey = "acs5",
+                        variables = c("DP02_0066PE", # HS Diploma or higher
+                                      "DP02_0067PE"), # College or graduate
+                        geography = "state",
+                        key = cs_key,
+                        output = "wide")
+acs_2010_edu <- acs_2010_edu %>%
+  rename(HS = DP02_0066PE,
+         college_grad = DP02_0067PE)
+
+acs_2010_edu$region <- tolower(acs_2010_edu$NAME)
+edu_2010_states <- inner_join(us_states, acs_2010_edu)
+
+census_2000_edu <- getCensus(name = "dec/sf3profile",
+                    vintage = 2000, 
+                    vars = c("NAME",
+                             "DP2_C19", # HS or higher
+                             "DP2_C11"), # College or grad school
+                    region = "state", 
+                    key = cs_key)
+census_2000_edu <- census_2000_edu %>%
+  rename(HS = DP2_C19,
+         college_grad = DP2_C11)
+
+census_2000_edu$region <- tolower(census_2000_edu$NAME)
+edu_2000_states <- inner_join(us_states, census_2000_edu)
+
+edu_2000_states$year <- "2000"
+edu_2010_states$year <- "2010"
+edu_2020_states$year <- "2020"
+
+# Keep only common columns
+common_cols <- Reduce(intersect, list(
+  names(edu_2000_states),
+  names(edu_2010_states),
+  names(edu_2020_states)
+))
+
+edu_2000_states2 <- edu_2000_states[, common_cols]
+edu_2010_states2 <- edu_2010_states[, common_cols]
+edu_2020_states2 <- edu_2020_states[, common_cols]
+
+edu_df <- rbind(edu_2000_states2, edu_2010_states2, edu_2020_states2)
+```
+
+## How has education changed?
+
+```{r, results='asis', warning=F, message=F, echo=FALSE}
+edu <- ggplot(edu_df) +
+  geom_polygon(
+    aes(
+      x = long,
+      y = lat,
+      group = group,
+      fill = HS,
+      frame = year,
+      text = paste0(
+        "State: ", NAME, "<br>",
+        "Percent of High School or Higher: ", HS, "%"
+      )
+    )
+  ) +
+  scale_fill_viridis_c() +
+  coord_fixed(1.3) +
+  labs(title = "Percent of High School or Higher by Year", fill = "Percent") +
+  theme_void() +
+  theme(plot.title = element_text(size = 22))
+educ <- ggplotly(edu, tooltip = "text") %>%
+  animation_opts(
+    frame = 0,               # set frame duration to 0
+    transition = 0,          # no smooth transition
+    redraw = TRUE
+  ) %>%
+  animation_slider(
+    currentvalue = list(prefix = "Year: "),
+  ) %>%
+  animation_button(
+    x = 1, y = 0,            # move button off-screen
+    visible = FALSE           # hide the Play button
+  ) %>%
+  layout(width = 1100, height = 850, margin = list(t = 60, b = 40, l = 20, r = 20))
+educ
+```
+
+## How has income changed?
+
+```{r sf3, echo=F, message=FALSE, warning=FALSE, results = "asis"}
+census_2000_sf3_states$year <- "2000"
+# Keep only common columns
+common_cols3 <- Reduce(intersect, list(
+  names(census_2000_sf3_states),
+  names(acs_2010_states),
+  names(acs_2020_states)
+))
+
+census_2000_sf3_states4 <- census_2000_sf3_states[, common_cols3]
+acs_2010_states4 <- acs_2010_states[, common_cols3]
+acs_2020_states4 <- acs_2020_states[, common_cols3]
+
+
+# Combine all years
+all_df3 <- rbind(census_2000_sf3_states4, acs_2010_states4, acs_2020_states4)
+
+s <- ggplot(all_df3) +
+  geom_polygon(
+    aes(
+      x = long,
+      y = lat,
+      group = group,
+      fill = Median_income,
+      frame = year,
+      text = paste0(
+        "State: ", NAME, "<br>",
+        "Median Income: ", "$", Median_income
+      )
+    )
+  ) +
+  scale_fill_viridis_c(option = "C") +
+  coord_fixed(1.3) +
+  labs(title = "Household Median Income by Year", fill = "$") +
+  theme_void() +
+  theme(plot.title = element_text(size = 20))
+ss <- ggplotly(s, tooltip = "text") %>%
+  animation_opts(
+    frame = 0,               # set frame duration to 0
+    transition = 0,          # no smooth transition
+    redraw = TRUE
+  ) %>%
+  animation_slider(
+    currentvalue = list(prefix = "Year: "),
+  ) %>%
+  animation_button(
+    x = 1, y = 0,            # move button off-screen
+    visible = FALSE           # hide the Play button
+  ) %>%
+  layout(width = 1100, height = 850, margin = list(t = 60, b = 40, l = 20, r = 20))
+
+ss
+
+```
