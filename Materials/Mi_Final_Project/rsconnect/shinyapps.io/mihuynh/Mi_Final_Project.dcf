@@ -1,0 +1,12 @@
+name: Mi_Final_Project
+title: Mi_Final_Project
+username: mihuynh
+account: mihuynh
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 16272874
+bundleId: 11304113
+url: https://mihuynh.shinyapps.io/Mi_Final_Project/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
